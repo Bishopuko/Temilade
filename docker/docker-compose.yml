@@ -1,0 +1,46 @@
+version: "3.8"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: notifications
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # Add service containers here, e.g.:
+  # api_gateway:
+  #   build: ../services/api_gateway
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     - rabbitmq
+  #     - postgres
+  #     - redis
+
+volumes:
+  rabbitmq_data:
+  postgres_data:
+  redis_data:

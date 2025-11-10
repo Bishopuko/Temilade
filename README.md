@@ -31,7 +31,7 @@ This project implements a distributed notification system with the following ser
 
 1. Clone the repo.
 2. Copy `.env.example` to `.env` and configure environment variables.
-3. Run `docker-compose up` in the docker/ directory to start all services.
+3. Run `docker-compose up` in the root directory to start all services.
 4. Services will be available at:
    - API Gateway: http://localhost:8000
    - User Service: http://localhost:5000

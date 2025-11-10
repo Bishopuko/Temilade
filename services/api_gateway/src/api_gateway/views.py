@@ -15,13 +15,39 @@ def get_rabbitmq_connection():
     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost', 5672, '/', credentials))
     return connection
 
+# Setup RabbitMQ queues
+def setup_queues(channel):
+    # Declare exchange
+    channel.exchange_declare(exchange='notifications.direct', exchange_type='direct')
+
+    # Declare dead-letter exchange
+    channel.exchange_declare(exchange='notifications.dlx', exchange_type='direct')
+
+    # Declare failed queue (dead-letter queue)
+    channel.queue_declare(queue='failed.queue', durable=True)
+    channel.queue_bind(exchange='notifications.dlx', queue='failed.queue', routing_key='failed')
+
+    # Declare email queue with dead-letter
+    channel.queue_declare(queue='email.queue', durable=True, arguments={
+        'x-dead-letter-exchange': 'notifications.dlx',
+        'x-dead-letter-routing-key': 'failed'
+    })
+    channel.queue_bind(exchange='notifications.direct', queue='email.queue', routing_key='email.queue')
+
+    # Declare push queue with dead-letter
+    channel.queue_declare(queue='push.queue', durable=True, arguments={
+        'x-dead-letter-exchange': 'notifications.dlx',
+        'x-dead-letter-routing-key': 'failed'
+    })
+    channel.queue_bind(exchange='notifications.direct', queue='push.queue', routing_key='push.queue')
+
 # Redis for idempotency
 redis_client = redis.Redis(host='localhost', port=6379, db=0)
 
 @api_view(['POST'])
 def send_notification(request):
     data = request.data
-    notification_type = data.get('type')  # 'email' or 'push'
+    notification_type = data.get('type')  
     user_id = data.get('user_id')
     template_id = data.get('template_id')
     variables = data.get('variables', {})
@@ -38,7 +64,7 @@ def send_notification(request):
     # Publish to queue
     connection = get_rabbitmq_connection()
     channel = connection.channel()
-    channel.exchange_declare(exchange='notifications.direct', exchange_type='direct')
+    setup_queues(channel)
 
     message = {
         'request_id': request_id,
@@ -55,4 +81,4 @@ def send_notification(request):
 
 @api_view(['GET'])
 def health_check(request):
-    return Response({'status': 'healthy'}, status=status.HTTP_200_OK)
+    return Response({'status': 'healthy', 'service': 'api_gateway'}, status=status.HTTP_200_OK)

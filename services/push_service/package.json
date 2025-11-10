@@ -1,7 +1,7 @@
 {
-  "name": "email-service",
+  "name": "push-service",
   "version": "1.0.0",
-  "description": "Email notification service",
+  "description": "Push notification service",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

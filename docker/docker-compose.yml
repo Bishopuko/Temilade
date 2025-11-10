@@ -7,21 +7,55 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-admin}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
-  postgres:
+  postgres_user:
     image: postgres:13
     environment:
-      POSTGRES_DB: notifications
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${USER_DB_NAME:-user_service}
+      POSTGRES_USER: ${USER_DB_USER:-user}
+      POSTGRES_PASSWORD: ${USER_DB_PASS:-password}
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_user_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${USER_DB_USER:-user} -d ${USER_DB_NAME:-user_service}",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  postgres_template:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: ${TEMPLATE_DB_NAME:-template_service}
+      POSTGRES_USER: ${TEMPLATE_DB_USER:-template}
+      POSTGRES_PASSWORD: ${TEMPLATE_DB_PASS:-password}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_template_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${TEMPLATE_DB_USER:-template} -d ${TEMPLATE_DB_NAME:-template_service}",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   redis:
     image: redis:6-alpine
@@ -29,18 +63,122 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
-  # Add service containers here, e.g.:
-  # api_gateway:
-  #   build: ../services/api_gateway
-  #   ports:
-  #     - "8000:8000"
-  #   depends_on:
-  #     - rabbitmq
-  #     - postgres
-  #     - redis
+  api_gateway:
+    build: ../services/api_gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_PASS=${RABBITMQ_PASS:-admin}
+      - REDIS_HOST=redis
+      - USER_SERVICE_URL=http://user_service:5000
+      - TEMPLATE_SERVICE_URL=http://template_service:8081
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  user_service:
+    build: ../services/user_service
+    ports:
+      - "5000:80"
+    environment:
+      - DB_HOST=postgres_user
+      - DB_NAME=${USER_DB_NAME:-user_service}
+      - DB_USER=${USER_DB_USER:-user}
+      - DB_PASS=${USER_DB_PASS:-password}
+      - REDIS_HOST=redis
+    depends_on:
+      postgres_user:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  email_service:
+    build: ../services/email_service
+    ports:
+      - "3000:3000"
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_PASS=${RABBITMQ_PASS:-admin}
+      - REDIS_HOST=redis
+      - TEMPLATE_SERVICE_URL=http://template_service:8081
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  push_service:
+    build: ../services/push_service
+    ports:
+      - "8080:8080"
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_PASS=${RABBITMQ_PASS:-admin}
+      - REDIS_HOST=redis
+      - TEMPLATE_SERVICE_URL=http://template_service:8081
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  template_service:
+    build: ../services/template_service
+    ports:
+      - "8081:8081"
+    environment:
+      - DB_HOST=postgres_template
+      - DB_NAME=${TEMPLATE_DB_NAME:-template_service}
+      - DB_USER=${TEMPLATE_DB_USER:-template}
+      - DB_PASS=${TEMPLATE_DB_PASS:-password}
+      - REDIS_HOST=redis
+    depends_on:
+      postgres_template:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
 volumes:
   rabbitmq_data:
-  postgres_data:
+  postgres_user_data:
+  postgres_template_data:
   redis_data:
+
+

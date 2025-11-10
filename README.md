@@ -30,8 +30,16 @@ This project implements a distributed notification system with the following ser
 ## Setup
 
 1. Clone the repo.
-2. Run `docker-compose up` in the docker/ directory.
-3. Each service has its own setup (see service READMEs).
+2. Copy `.env.example` to `.env` and configure environment variables.
+3. Run `docker-compose up` in the docker/ directory to start all services.
+4. Services will be available at:
+   - API Gateway: http://localhost:8000
+   - User Service: http://localhost:5000
+   - Email Service: http://localhost:3000
+   - Push Service: http://localhost:8080
+   - Template Service: http://localhost:8081
+   - RabbitMQ Management: http://localhost:15672
+5. Each service has a `/health` endpoint for status checks.
 
 ## Team Assignments
 
@@ -40,7 +48,3 @@ See TASKS.md for detailed tasks per member.
 ## CI/CD
 
 GitHub Actions workflow for automated testing and deployment.
-
-## Submission
-
-Use /submit command in channel. Deadline: Nov 12, 2025, 11:59pm WAT.

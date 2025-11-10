@@ -1,22 +1,10 @@
 <?php
-require __DIR__ . '/../vendor/autoload.php';
+header('Content-Type: application/json');
 
-use Slim\Factory\AppFactory;
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $_SERVER['REQUEST_URI'] === '/health') {
+    echo json_encode(['service' => 'template_service']);
+    exit;
+}
 
-$app = AppFactory::create();
-
-$app->get('/health', function ($request, $response, $args) {
-    $response->getBody()->write("Healthy");
-    return $response;
-});
-
-$app->get('/templates/{id}', function ($request, $response, $args) {
-    $id = $args['id'];
-    // Fetch template from DB
-    $template = ['id' => $id, 'content' => 'Hello {{name}}!'];
-    $response->getBody()->write(json_encode($template));
-    return $response->withHeader('Content-Type', 'application/json');
-});
-
-$app->run();
-?>
+echo json_encode(['error' => 'Not found']);
+http_response_code(404);

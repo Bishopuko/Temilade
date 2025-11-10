@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -125,15 +126,15 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# RabbitMQ settings
-RABBITMQ_HOST = 'localhost'
-RABBITMQ_PORT = 5672
-RABBITMQ_USER = 'admin'
-RABBITMQ_PASS = 'admin'
 
-# Redis settings
-REDIS_HOST = 'localhost'
-REDIS_PORT = 6379
+
+RABBITMQ_HOST = os.getenv('RABBITMQ_HOST', 'rabbitmq')
+RABBITMQ_PORT = int(os.getenv('RABBITMQ_PORT', 5672))
+RABBITMQ_USER = os.getenv('RABBITMQ_USER', 'admin')
+RABBITMQ_PASS = os.getenv('RABBITMQ_PASS', 'admin')
+
+REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
+REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 
 # Logging configuration
 LOGGING = {
@@ -192,3 +193,14 @@ REST_FRAMEWORK = {
         'user': '1000/minute'
     }
 }
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://redis:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+

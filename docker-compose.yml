@@ -70,7 +70,7 @@ services:
       retries: 5
 
   api_gateway:
-    build: ../services/api_gateway
+    build: ./services/api_gateway
     ports:
       - "8000:8000"
     environment:
@@ -92,7 +92,7 @@ services:
       retries: 5
 
   user_service:
-    build: ../services/user_service
+    build: ./services/user_service
     ports:
       - "5000:80"
     environment:
@@ -113,7 +113,7 @@ services:
       retries: 5
 
   email_service:
-    build: ../services/email_service
+    build: ./services/email_service
     ports:
       - "3000:3000"
     environment:
@@ -134,7 +134,7 @@ services:
       retries: 5
 
   push_service:
-    build: ../services/push_service
+    build: ./services/push_service
     ports:
       - "8080:8080"
     environment:
@@ -155,7 +155,7 @@ services:
       retries: 5
 
   template_service:
-    build: ../services/template_service
+    build: ./services/template_service
     ports:
       - "8081:8081"
     environment:

@@ -28,7 +28,7 @@ Build a notification system that sends emails and push notifications using separ
 - [x] Docker Compose configuration
 - [x] Basic service skeletons
 - [x] RabbitMQ queue setup in API Gateway
-- [ ] Complete API Gateway implementation
+- [x] Complete API Gateway implementation
 - [ ] User Service implementation
 - [ ] Email Service implementation
 - [ ] Push Service implementation

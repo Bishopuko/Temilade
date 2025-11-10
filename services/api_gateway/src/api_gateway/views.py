@@ -109,21 +109,42 @@ def validate_notification_data(data):
     """Validate notification request data"""
     errors = []
 
-    notification_type = data.get('type')
+    notification_type = data.get('notification_type')
     if not notification_type or notification_type not in ['email', 'push']:
-        errors.append('type must be either "email" or "push"')
+        errors.append('notification_type must be either "email" or "push"')
 
     user_id = data.get('user_id')
     if not user_id or not isinstance(user_id, str):
         errors.append('user_id is required and must be a string')
 
-    template_id = data.get('template_id')
-    if not template_id or not isinstance(template_id, str):
-        errors.append('template_id is required and must be a string')
+    template_code = data.get('template_code')
+    if not template_code or not isinstance(template_code, str):
+        errors.append('template_code is required and must be a string')
 
     variables = data.get('variables', {})
     if not isinstance(variables, dict):
         errors.append('variables must be a dictionary')
+
+    # Validate UserData structure
+    if variables:
+        if 'name' not in variables or not isinstance(variables['name'], str):
+            errors.append('variables.name is required and must be a string')
+        if 'link' in variables and not isinstance(variables['link'], str):
+            errors.append('variables.link must be a valid URL string')
+        if 'meta' in variables and not isinstance(variables['meta'], dict):
+            errors.append('variables.meta must be a dictionary')
+
+    request_id = data.get('request_id')
+    if request_id and not isinstance(request_id, str):
+        errors.append('request_id must be a string')
+
+    priority = data.get('priority')
+    if priority is not None and not isinstance(priority, int):
+        errors.append('priority must be an integer')
+
+    metadata = data.get('metadata')
+    if metadata is not None and not isinstance(metadata, dict):
+        errors.append('metadata must be a dictionary')
 
     return errors
 
@@ -145,10 +166,13 @@ def send_notification(request):
             'details': validation_errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    notification_type = data.get('type')
+    notification_type = data.get('notification_type')
     user_id = data.get('user_id')
-    template_id = data.get('template_id')
+    template_code = data.get('template_code')
     variables = data.get('variables', {})
+    request_id = data.get('request_id')
+    priority = data.get('priority', 1)
+    metadata = data.get('metadata', {})
 
     # Check circuit breaker
     if not check_circuit_breaker():
@@ -158,9 +182,10 @@ def send_notification(request):
             'error': 'Service temporarily unavailable'
         }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-    # Generate idempotency key from request content
-    request_fingerprint = f"{notification_type}:{user_id}:{template_id}:{json.dumps(variables, sort_keys=True)}"
-    request_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, request_fingerprint))
+    # Use provided request_id or generate one
+    if not request_id:
+        request_fingerprint = f"{notification_type}:{user_id}:{template_code}:{json.dumps(variables, sort_keys=True)}"
+        request_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, request_fingerprint))
 
     # Idempotency check
     if redis_client.get(f"idempotency:{request_id}"):
@@ -191,7 +216,7 @@ def send_notification(request):
         record_success()
 
         # Validate template exists (circuit breaker protected)
-        template_service_url = f"http://template_service:8081/templates/{template_id}"
+        template_service_url = f"http://template_service:8081/templates/{template_code}"
         template_response = requests.get(template_service_url, timeout=5)
 
         if template_response.status_code != 200:
@@ -212,8 +237,10 @@ def send_notification(request):
         message = {
             'request_id': request_id,
             'user_id': user_id,
-            'template_id': template_id,
+            'template_code': template_code,
             'variables': variables,
+            'priority': priority,
+            'metadata': metadata,
             'timestamp': time.time()
         }
 

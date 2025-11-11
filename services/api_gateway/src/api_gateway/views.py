@@ -17,6 +17,22 @@ from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 import time
+from enum import Enum
+from dataclasses import dataclass
+from typing import Optional
+from datetime import datetime
+
+class NotificationStatus(str, Enum):
+    delivered = "delivered"
+    pending = "pending"
+    failed = "failed"
+
+@dataclass
+class NotificationStatusData:
+    notification_id: str
+    status: NotificationStatus
+    timestamp: Optional[datetime] = None
+    error: Optional[str] = None
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -196,8 +212,18 @@ def send_notification(request):
             'request_id': request_id
         }, status=status.HTTP_409_CONFLICT)
 
-    # Store initial status
-    redis_client.setex(f"status:{request_id}", 3600, 'queued')
+    # Store initial status as structured data
+    initial_status = NotificationStatusData(
+        notification_id=request_id,
+        status=NotificationStatus.pending,
+        timestamp=datetime.now()
+    )
+    redis_client.setex(f"status:{request_id}", 3600, json.dumps({
+        'notification_id': initial_status.notification_id,
+        'status': initial_status.status.value,
+        'timestamp': initial_status.timestamp.isoformat() if initial_status.timestamp else None,
+        'error': initial_status.error
+    }))
     redis_client.setex(f"idempotency:{request_id}", 3600, 'processing')
 
     try:
@@ -267,7 +293,19 @@ def send_notification(request):
     except Exception as e:
         record_failure()
         logger.error(f"Error processing notification: {str(e)}")
-        redis_client.setex(f"status:{request_id}", 3600, 'failed')
+        # Store failed status with error details
+        failed_status = NotificationStatusData(
+            notification_id=request_id,
+            status=NotificationStatus.failed,
+            timestamp=datetime.now(),
+            error=str(e)
+        )
+        redis_client.setex(f"status:{request_id}", 3600, json.dumps({
+            'notification_id': failed_status.notification_id,
+            'status': failed_status.status.value,
+            'timestamp': failed_status.timestamp.isoformat() if failed_status.timestamp else None,
+            'error': failed_status.error
+        }))
         return Response({
             'success': False,
             'error': 'Internal server error'
@@ -283,19 +321,33 @@ def get_notification_status(request, request_id):
             'error': 'request_id is required'
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    status_value = redis_client.get(f"status:{request_id}")
-    if not status_value:
+    status_json = redis_client.get(f"status:{request_id}")
+    if not status_json:
         return Response({
             'success': False,
             'error': 'Notification not found'
         }, status=status.HTTP_404_NOT_FOUND)
 
-    return Response({
-        'success': True,
-        'request_id': request_id,
-        'status': status_value,
-        'timestamp': time.time()
-    }, status=status.HTTP_200_OK)
+    try:
+        # Parse the JSON status data
+        status_data = json.loads(status_json)
+        return Response({
+            'success': True,
+            'notification_id': status_data['notification_id'],
+            'status': status_data['status'],
+            'timestamp': status_data.get('timestamp'),
+            'error': status_data.get('error')
+        }, status=status.HTTP_200_OK)
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.error(f"Error parsing status data for {request_id}: {str(e)}")
+        # Fallback for old format or corrupted data
+        return Response({
+            'success': True,
+            'notification_id': request_id,
+            'status': status_json,  # Return raw value
+            'timestamp': time.time(),
+            'error': None
+        }, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 def health_check(request):

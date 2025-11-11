@@ -30,16 +30,22 @@ This project implements a distributed notification system with the following ser
 ## Setup
 
 1. Clone the repo.
-2. Copy `.env.example` to `.env` and configure environment variables.
-3. Run `docker-compose up` in the root directory to start all services.
-4. Services will be available at:
+2. Copy `.env.example` to `.env` and configure shared infrastructure variables.
+3. For each service, copy the respective `.env.example` to `.env` in the service directory and configure service-specific variables:
+   - `services/api_gateway/.env`
+   - `services/user_service/.env`
+   - `services/email_service/.env`
+   - `services/push_service/.env`
+   - `services/template_service/.env`
+4. Run `docker-compose up` in the root directory to start all services.
+5. Services will be available at:
    - API Gateway: http://localhost:8000
    - User Service: http://localhost:5000
    - Email Service: http://localhost:3000
    - Push Service: http://localhost:8080
    - Template Service: http://localhost:8081
    - RabbitMQ Management: http://localhost:15672
-5. Each service has a `/health` endpoint for status checks.
+6. Each service has a `/health` endpoint for status checks.
 
 ## Team Assignments
 

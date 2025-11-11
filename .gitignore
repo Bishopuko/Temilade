@@ -90,7 +90,10 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-.env.example
+# Environment files
+.env
+services/*/env
+services/*/.env
 
 # Spyder project settings
 .spyderproject

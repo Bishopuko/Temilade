@@ -77,7 +77,7 @@ services:
       - "8000:8000"
     env_file:
       - .env
-      - ./services/api_gateway/.env
+      - ./services/api_gateway/src/.env
     environment:
       - RABBITMQ_HOST=rabbitmq
       - REDIS_HOST=redis

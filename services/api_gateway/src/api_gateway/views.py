@@ -3,13 +3,18 @@ import json
 import pika
 import logging
 import requests
+import httpx
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 import redis
 from django.core.cache import cache
@@ -21,6 +26,7 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Optional
 from datetime import datetime
+from .models import Notification
 
 class NotificationStatus(str, Enum):
     delivered = "delivered"
@@ -87,39 +93,56 @@ redis_client = redis.Redis(
     decode_responses=True
 )
 
-# Circuit breaker state
-circuit_breaker_state = {
-    'failures': 0,
-    'last_failure_time': 0,
-    'state': 'closed'  # closed, open, half-open
-}
+# Circuit breaker state in Redis for multi-instance support
 CIRCUIT_BREAKER_THRESHOLD = 5
 CIRCUIT_BREAKER_TIMEOUT = 60  # seconds
 
-def check_circuit_breaker():
+def get_circuit_breaker_state(service_name):
+    """Get circuit breaker state from Redis"""
+    state = redis_client.hgetall(f"circuit_breaker:{service_name}")
+    if not state:
+        return {'failures': 0, 'last_failure_time': 0, 'state': 'closed'}
+    return {
+        'failures': int(state.get('failures', 0)),
+        'last_failure_time': float(state.get('last_failure_time', 0)),
+        'state': state.get('state', 'closed')
+    }
+
+def set_circuit_breaker_state(service_name, state):
+    """Set circuit breaker state in Redis"""
+    redis_client.hmset(f"circuit_breaker:{service_name}", state)
+
+def check_circuit_breaker(service_name):
     """Check if circuit breaker allows the request"""
+    state = get_circuit_breaker_state(service_name)
     current_time = time.time()
 
-    if circuit_breaker_state['state'] == 'open':
-        if current_time - circuit_breaker_state['last_failure_time'] > CIRCUIT_BREAKER_TIMEOUT:
-            circuit_breaker_state['state'] = 'half-open'
+    if state['state'] == 'open':
+        if current_time - state['last_failure_time'] > CIRCUIT_BREAKER_TIMEOUT:
+            state['state'] = 'half-open'
+            set_circuit_breaker_state(service_name, state)
             return True
         return False
     return True
 
-def record_failure():
+def record_failure(service_name):
     """Record a failure in circuit breaker"""
-    circuit_breaker_state['failures'] += 1
-    circuit_breaker_state['last_failure_time'] = time.time()
+    state = get_circuit_breaker_state(service_name)
+    state['failures'] += 1
+    state['last_failure_time'] = time.time()
 
-    if circuit_breaker_state['failures'] >= CIRCUIT_BREAKER_THRESHOLD:
-        circuit_breaker_state['state'] = 'open'
+    if state['failures'] >= CIRCUIT_BREAKER_THRESHOLD:
+        state['state'] = 'open'
 
-def record_success():
+    set_circuit_breaker_state(service_name, state)
+
+def record_success(service_name):
     """Record a success in circuit breaker"""
-    if circuit_breaker_state['state'] == 'half-open':
-        circuit_breaker_state['state'] = 'closed'
-        circuit_breaker_state['failures'] = 0
+    state = get_circuit_breaker_state(service_name)
+    if state['state'] == 'half-open':
+        state['state'] = 'closed'
+        state['failures'] = 0
+        set_circuit_breaker_state(service_name, state)
 
 def validate_notification_data(data):
     """Validate notification request data"""
@@ -165,6 +188,7 @@ def validate_notification_data(data):
     return errors
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 @ratelimit(key='user', rate='100/m', block=True)
 def send_notification(request):
     # Log request
@@ -190,9 +214,9 @@ def send_notification(request):
     priority = data.get('priority', 1)
     metadata = data.get('metadata', {})
 
-    # Check circuit breaker
-    if not check_circuit_breaker():
-        logger.warning("Circuit breaker is open, rejecting request")
+    # Check circuit breaker for user service
+    if not check_circuit_breaker('user_service'):
+        logger.warning("Circuit breaker is open for user service, rejecting request")
         return Response({
             'success': False,
             'error': 'Service temporarily unavailable'
@@ -232,28 +256,28 @@ def send_notification(request):
         user_response = requests.get(user_service_url, timeout=5)
 
         if user_response.status_code != 200:
-            record_failure()
+            record_failure('user_service')
             logger.error(f"User service error: {user_response.status_code}")
             return Response({
                 'success': False,
                 'error': 'User validation failed'
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        record_success()
+        record_success('user_service')
 
         # Validate template exists (circuit breaker protected)
         template_service_url = f"http://template_service:8081/templates/{template_code}"
         template_response = requests.get(template_service_url, timeout=5)
 
         if template_response.status_code != 200:
-            record_failure()
+            record_failure('template_service')
             logger.error(f"Template service error: {template_response.status_code}")
             return Response({
                 'success': False,
                 'error': 'Template validation failed'
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        record_success()
+        record_success('template_service')
 
         # Publish to queue
         connection = get_rabbitmq_connection()
@@ -291,7 +315,7 @@ def send_notification(request):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        record_failure()
+        record_failure('general')
         logger.error(f"Error processing notification: {str(e)}")
         # Store failed status with error details
         failed_status = NotificationStatusData(
@@ -312,6 +336,7 @@ def send_notification(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 @cache_page(60)  # Cache for 60 seconds
 def get_notification_status(request, request_id):
     """Get the status of a notification by request_id"""
@@ -350,6 +375,7 @@ def get_notification_status(request, request_id):
         }, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def health_check(request):
     """Health check endpoint"""
     # Check Redis connectivity
@@ -376,6 +402,56 @@ def health_check(request):
             'redis': redis_status,
             'rabbitmq': rabbitmq_status
         },
-        'circuit_breaker': circuit_breaker_state['state'],
+        'circuit_breaker': {
+            'user_service': get_circuit_breaker_state('user_service')['state'],
+            'template_service': get_circuit_breaker_state('template_service')['state'],
+            'general': get_circuit_breaker_state('general')['state']
+        },
         'timestamp': time.time()
     }, status=status.HTTP_200_OK)
+
+
+# JWT Authentication Views
+class CustomTokenObtainPairView(TokenObtainPairView):
+    """Custom token obtain view with additional logging"""
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        correlation_id = request.META.get('X_CORRELATION_ID')
+        logger.info(f"Token obtain attempt", extra={'correlation_id': correlation_id})
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            logger.info(f"Token obtained successfully", extra={'correlation_id': correlation_id})
+        else:
+            logger.warning(f"Token obtain failed", extra={'correlation_id': correlation_id})
+        return response
+
+
+class CustomTokenRefreshView(TokenRefreshView):
+    """Custom token refresh view with logging"""
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        correlation_id = request.META.get('X_CORRELATION_ID')
+        logger.info(f"Token refresh attempt", extra={'correlation_id': correlation_id})
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            logger.info(f"Token refreshed successfully", extra={'correlation_id': correlation_id})
+        else:
+            logger.warning(f"Token refresh failed", extra={'correlation_id': correlation_id})
+        return response
+
+
+class CustomTokenVerifyView(TokenVerifyView):
+    """Custom token verify view with logging"""
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        correlation_id = request.META.get('X_CORRELATION_ID')
+        logger.info(f"Token verify attempt", extra={'correlation_id': correlation_id})
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            logger.info(f"Token verified successfully", extra={'correlation_id': correlation_id})
+        else:
+            logger.warning(f"Token verify failed", extra={'correlation_id': correlation_id})
+        return response

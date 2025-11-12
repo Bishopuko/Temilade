@@ -163,7 +163,7 @@ jobs:
       - name: Build and push API Gateway
         uses: docker/build-push-action@v5
         with:
-          context: services/api_gateway/src
+          context: services/api_gateway
           push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
           tags: ${{ secrets.DOCKER_USERNAME != '' && format('{0}/notification-api-gateway:latest', secrets.DOCKER_USERNAME) || 'notification-api-gateway:latest' }}
 

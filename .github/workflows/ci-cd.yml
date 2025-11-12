@@ -11,13 +11,33 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [api_gateway, user_service, email_service, push_service, template_service]
+        service:
+          [
+            api_gateway,
+            user_service,
+            email_service,
+            push_service,
+            template_service,
+          ]
 
     services:
       redis:
         image: redis:7
         ports:
           - 6379:6379
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports:
+          - 5672:5672
+          - 15672:15672
+        env:
+          RABBITMQ_DEFAULT_USER: admin
+          RABBITMQ_DEFAULT_PASS: admin
+        options: >-
+          --health-cmd="rabbitmq-diagnostics ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
       postgres:
         image: postgres:15
         env:
@@ -170,14 +190,16 @@ jobs:
       - name: Test service health endpoints
         run: |
           echo "Building test containers..."
-          docker-compose -f docker/docker-compose.yml up -d --build
+          docker-compose -f docker-compose.yml up -d --build
           echo "Waiting for services to start..."
           for i in {1..30}; do
-            curl -f http://localhost:8000/api/health && break || sleep 2
+            curl -f http://localhost:8000/health && break || sleep 2
           done
+          curl -f http://localhost:5000/health || echo "User service health check failed"
           curl -f http://localhost:3000/health || echo "Email service health check failed"
           curl -f http://localhost:8080/health || echo "Push service health check failed"
-          docker-compose -f docker/docker-compose.yml down
+          curl -f http://localhost:8081/health || echo "Template service health check failed"
+          docker-compose -f docker-compose.yml down
 
       - name: Deploy
         if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}

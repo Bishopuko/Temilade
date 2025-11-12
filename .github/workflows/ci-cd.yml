@@ -7,6 +7,9 @@ on:
     branches: [main]
 
 jobs:
+  # ----------------------------
+  # Test all services
+  # ----------------------------
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -55,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Test API Gateway (Python/Django)
+      # Python / API Gateway
       - name: Setup Python
         if: matrix.service == 'api_gateway'
         uses: actions/setup-python@v4
@@ -77,7 +80,7 @@ jobs:
           cd services/api_gateway/src
           python manage.py test || echo "No tests found, skipping"
 
-      # Test User Service (.NET)
+      # .NET / User Service
       - name: Setup .NET
         if: matrix.service == 'user_service'
         uses: actions/setup-dotnet@v3
@@ -90,7 +93,7 @@ jobs:
           cd services/user_service
           dotnet test || echo "No tests found, skipping"
 
-      # Test Email Service (Node.js)
+      # Node.js / Email Service
       - name: Setup Node.js for Email Service
         if: matrix.service == 'email_service'
         uses: actions/setup-node@v4
@@ -104,7 +107,7 @@ jobs:
           npm install
           npm test || echo "No tests found, skipping"
 
-      # Test Push Service (Node.js)
+      # Node.js / Push Service
       - name: Setup Node.js for Push Service
         if: matrix.service == 'push_service'
         uses: actions/setup-node@v4
@@ -118,7 +121,7 @@ jobs:
           npm install
           npm test || echo "No tests found, skipping"
 
-      # Test Template Service (PHP)
+      # PHP / Template Service
       - name: Setup PHP
         if: matrix.service == 'template_service'
         uses: shivammathur/setup-php@v2
@@ -130,62 +133,80 @@ jobs:
         run: |
           cd services/template_service
           composer install --no-dev --optimize-autoloader
-          phpunit || vendor/bin/phpunit || echo "No tests found, skipping"
+          vendor/bin/phpunit || echo "No tests found, skipping"
 
-        build-and-deploy:
-        needs: test
-        runs-on: ubuntu-latest
-        if: github.ref == 'refs/heads/main'
+  # ----------------------------
+  # Build and deploy Docker images
+  # ----------------------------
+  build-and-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
 
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
-        steps:
-          - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-          - name: Set up Docker Buildx
-            uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-          - name: Log in to Docker Hub
-            if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
-            uses: docker/login-action@v3
-            with:
-              username: ${{ secrets.DOCKER_USERNAME }}
-              password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Log in to Docker Hub
+        if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-          # Build and push all service images
-          - name: Build and push API Gateway
-            uses: docker/build-push-action@v5
-            with:
-              context: services/api_gateway/src
-              push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
-              tags: ${{ secrets.DOCKER_USERNAME }}/notification-api-gateway:latest
+      # Build and push Docker images
+      - name: Build and push API Gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: services/api_gateway/src
+          push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/notification-api-gateway:latest
 
-          - name: Build and push User Service
-            uses: docker/build-push-action@v5
-            with:
-              context: services/user_service
-              push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
-              tags: ${{ secrets.DOCKER_USERNAME }}/notification-user-service:latest
+      - name: Build and push User Service
+        uses: docker/build-push-action@v5
+        with:
+          context: services/user_service
+          push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/notification-user-service:latest
 
-        # Health check containers
+      - name: Build and push Email Service
+        uses: docker/build-push-action@v5
+        with:
+          context: services/email_service
+          push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/notification-email-service:latest
+
+      - name: Build and push Push Service
+        uses: docker/build-push-action@v5
+        with:
+          context: services/push_service
+          push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/notification-push-service:latest
+
+      - name: Build and push Template Service
+        uses: docker/build-push-action@v5
+        with:
+          context: services/template_service
+          push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/notification-template-service:latest
+
+      # Optional: Health checks and deployment steps
       - name: Test service health endpoints
         run: |
-            echo "Building test containers..."
-            docker-compose -f docker-compose.yml up -d --build
-            echo "Waiting for services to start..."
-            for i in {1..30}; do
-              curl -f http://localhost:8000/health && break || sleep 2
-            done
-            curl -f http://localhost:5000/health || echo "User service health check failed"
-            curl -f http://localhost:3000/health || echo "Email service health check failed"
-            curl -f http://localhost:8080/health || echo "Push service health check failed"
-            curl -f http://localhost:8081/health || echo "Template service health check failed"
-            docker-compose -f docker-compose.yml down
+          docker-compose -f docker-compose.yml up -d --build
+          for i in {1..30}; do
+            curl -f http://localhost:8000/health && break || sleep 2
+          done
+          docker-compose -f docker-compose.yml down
 
       - name: Deploy
         if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
         run: |
-            echo "Deploying to production..."
-            # Add actual deployment steps here (e.g., kubectl apply -f k8s/)
+          echo "Deploying to production..."
+          # Add your deployment commands here (kubectl, ssh, etc.)

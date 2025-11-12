@@ -205,7 +205,7 @@ jobs:
           docker-compose -f docker-compose.yml down
 
       - name: Deploy
-        if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+        # if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
         run: |
           echo "Deploying to production..."
           # Add your deployment commands here (kubectl, ssh, etc.)

@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  user_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: user_service
+    ports:
+      - "5001:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=UserServiceDb;Username=postgres;Password=damimola
+      - ConnectionStrings__Redis=redis:6379
+      - Jwt__Secret=your-super-secret-jwt
+      - Jwt__Issuer=user-service
+      - Jwt__Audience=notification-system
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - notification_network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: user_service_postgres
+    environment:
+      - POSTGRES_DB=UserServiceDb
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=damimola
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - notification_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: user_service_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - notification_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  notification_network:
+    driver: bridge

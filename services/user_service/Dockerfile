@@ -1,15 +1,20 @@
-FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY ["UserService.csproj", "."]
-RUN dotnet restore "./UserService.csproj"
+
+COPY ["services/user_service/UserService.csproj", "UserService/"]
+RUN dotnet restore "UserService/UserService.csproj"
+
 COPY . .
-WORKDIR "/src/."
-RUN dotnet build "UserService.csproj" -c Release -o /app/build
+WORKDIR "/src/UserService"
 
-FROM build AS publish
-RUN dotnet publish "UserService.csproj" -c Release -o /app/publish
+RUN dotnet publish "UserService.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:6.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
-COPY --from=publish /app/publish .
+COPY --from=build /app/publish .
+
+EXPOSE 8080
+
 ENTRYPOINT ["dotnet", "UserService.dll"]
+

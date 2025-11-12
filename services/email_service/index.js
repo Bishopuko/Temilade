@@ -74,36 +74,31 @@ async function connectRabbitMQ() {
           console.log("Processing email notification:::", requestId);
 
           // Get user contact info
-          // const userResponse = await fetch(
-          //   `http://user_service:5000/users/${message.user_id}/contact`
-          // );
-          // if (!userResponse.ok) {
-          //   throw new Error("Failed to get user contact info");
-          // }
-          // const userData = await userResponse.json();
+          const userResponse = await fetch(
+            `http://user_service:5000/users/${message.user_id}/contact`
+          );
+          if (!userResponse.ok) {
+            throw new Error("Failed to get user contact info");
+          }
+          const userData = await userResponse.json();
 
           // Get template
-          // const templateResponse = await fetch(
-          //   `http://template_service:8081/templates/${message.template_code}`
-          // );
-          // if (!templateResponse.ok) {
-          //   throw new Error("Failed to get template");
-          // }
-          // const templateData = await templateResponse.json();
-
-          // const template = {
-          //   subject: "TEST SUBJECT",
-          //   body: "Hi {{name}}, welcome to the system.",
-          // };
+          const templateResponse = await fetch(
+            `http://template_service:8081/templates/${message.template_code}`
+          );
+          if (!templateResponse.ok) {
+            throw new Error("Failed to get template");
+          }
+          const templateData = await templateResponse.json();
 
           // Render email content
-          // let subject = templateData.subject;
-          // let body = templateData.body;
-          let subject = "TEST SUBJECT";
-          let body = "TEST BODY";
+          let subject = templateData.subject;
+          let body = templateData.body;
+          const to = userData.email;
 
-          const to = "osuolaleabdullahi@gmail.com";
-          // const to = userData.email;
+          // let subject = "TEST SUBJECT";
+          // let body = "TEST BODY";
+          // const to = "osuolaleabdullahi@gmail.com";
 
           // Simple variable replacement
           Object.keys(message.variables).forEach((key) => {

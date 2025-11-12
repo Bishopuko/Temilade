@@ -1,46 +1,52 @@
 import json
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
 from rest_framework import status
 from unittest.mock import patch, MagicMock, Mock
 from api_gateway.models import Notification, NotificationStatus
-# ...existing code...
 import pytest
 import fakeredis
 
 
-# Replace import path if your views import redis_client differently (e.g. api_gateway.redis_client)
-REDIS_TARGET = "api_gateway.views.redis_client"
-REQUESTS_TARGET = "api_gateway.views.requests"
-
+# Mock external services for all tests
 @pytest.fixture(autouse=True)
-def fake_redis(monkeypatch):
-    """
-    Provide a fake redis instance for all tests to prevent real Redis connections.
-    """
+def mock_redis(monkeypatch):
+    """Mock Redis client to prevent real connections"""
     fake_server = fakeredis.FakeServer()
     fake_client = fakeredis.FakeStrictRedis(server=fake_server)
-    monkeypatch.setattr(REDIS_TARGET, fake_client)
+    monkeypatch.setattr("api_gateway.views.redis_client", fake_client)
     yield
 
 @pytest.fixture(autouse=True)
-def mock_user_service_requests(monkeypatch):
-    """
-    Prevent outbound HTTP calls to the user service during tests.
-    Returns a simple 200 response with expected fields. Adjust payload as needed.
-    """
+def mock_requests(monkeypatch):
+    """Mock HTTP requests to external services"""
     mock_requests = Mock()
 
     def mocked_get(url, *args, **kwargs):
         mock_resp = Mock()
-        # adapt the returned json to what your code expects
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"email": "test@example.com", "push_token": "token123"}
+        if "user_service" in url:
+            mock_resp.json.return_value = {"email": "test@example.com", "push_token": "token123"}
+        elif "template_service" in url:
+            mock_resp.json.return_value = {"template": "test_template", "variables": ["name", "link"]}
         return mock_resp
 
     mock_requests.get = mocked_get
-    monkeypatch.setattr(REQUESTS_TARGET, mock_requests)
+    monkeypatch.setattr("api_gateway.views.requests", mock_requests)
+    yield
+
+@pytest.fixture(autouse=True)
+def mock_rabbitmq(monkeypatch):
+    """Mock RabbitMQ connections"""
+    mock_connection = Mock()
+    mock_channel = Mock()
+    mock_connection.channel.return_value = mock_channel
+
+    def mock_get_rabbitmq_connection():
+        return mock_connection
+
+    monkeypatch.setattr("api_gateway.views.get_rabbitmq_connection", mock_get_rabbitmq_connection)
     yield
 # ...existing code...
 
@@ -507,35 +513,6 @@ class CorrelationIdTestCase(APITestCase):
         with self.assertLogs('api_gateway', level='INFO') as log:
             response = self.client.get(url)
 
-        # Should still log with some correlation ID        # ...existing code...
-        import pytest
-        import fakeredis
-        from unittest.mock import Mock
-        
-        # Update these to match how your views import redis_client and requests
-        REDIS_TARGET = "api_gateway.views.redis_client"
-        REQUESTS_TARGET = "api_gateway.views.requests"
-        
-        @pytest.fixture(autouse=True)
-        def fake_redis(monkeypatch):
-            server = fakeredis.FakeServer()
-            client = fakeredis.FakeStrictRedis(server=server)
-            monkeypatch.setattr(REDIS_TARGET, client)
-            yield
-        
-        @pytest.fixture(autouse=True)
-        def mock_user_service_requests(monkeypatch):
-            mock_requests = Mock()
-        
-            def mocked_get(url, *args, **kwargs):
-                resp = Mock()
-                resp.status_code = 200
-                resp.json.return_value = {"email": "test@example.com", "push_token": "token123"}
-                return resp
-        
-            mock_requests.get = mocked_get
-            monkeypatch.setattr(REQUESTS_TARGET, mock_requests)
-            yield
-        # ...existing code...
+        # Should still log with some correlation ID
         log_messages = [record.message for record in log.records]
         self.assertTrue(len(log_messages) > 0, "Should generate correlation ID when not provided")

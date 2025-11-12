@@ -11,30 +11,49 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service:
-          [
-            api_gateway,
-            user_service,
-            email_service,
-            push_service,
-            template_service,
-          ]
+        service: [api_gateway, user_service, email_service, push_service, template_service]
+
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
       - uses: actions/checkout@v4
 
       # Test API Gateway (Python/Django)
-      - name: Test API Gateway
+      - name: Setup Python
         if: matrix.service == 'api_gateway'
         uses: actions/setup-python@v4
         with:
           python-version: 3.9
-      - name: Install API Gateway dependencies
+
+      - name: Cache pip dependencies
+        if: matrix.service == 'api_gateway'
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('services/api_gateway/src/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install and Test API Gateway
         if: matrix.service == 'api_gateway'
         run: |
-          pip install -r services/api_gateway/requirements.txt
-      - name: Run API Gateway tests
-        if: matrix.service == 'api_gateway'
-        run: |
+          pip install -r services/api_gateway/src/requirements.txt
           cd services/api_gateway/src
           python manage.py test || echo "No tests found, skipping"
 
@@ -44,6 +63,7 @@ jobs:
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: 8.0.x
+
       - name: Test User Service
         if: matrix.service == 'user_service'
         run: |
@@ -51,29 +71,27 @@ jobs:
           dotnet test || echo "No tests found, skipping"
 
       # Test Email Service (Node.js)
-      - name: Setup Node.js
+      - name: Setup Node.js for Email Service
         if: matrix.service == 'email_service'
         uses: actions/setup-node@v4
         with:
           node-version: 18
-      - name: Install Email Service dependencies
+
+      - name: Install and Test Email Service
         if: matrix.service == 'email_service'
         run: |
           cd services/email_service
           npm install
-      - name: Test Email Service
-        if: matrix.service == 'email_service'
-        run: |
-          cd services/email_service
           npm test || echo "No tests found, skipping"
 
       # Test Push Service (Node.js)
-      - name: Install Push Service dependencies
+      - name: Setup Node.js for Push Service
         if: matrix.service == 'push_service'
         uses: actions/setup-node@v4
         with:
           node-version: 18
-      - name: Test Push Service
+
+      - name: Install and Test Push Service
         if: matrix.service == 'push_service'
         run: |
           cd services/push_service
@@ -86,85 +104,83 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: 8.1
-      - name: Install Template Service dependencies
+
+      - name: Install and Test Template Service
         if: matrix.service == 'template_service'
         run: |
           cd services/template_service
           composer install --no-dev --optimize-autoloader
-      - name: Test Template Service
-        if: matrix.service == 'template_service'
-        run: |
-          cd services/template_service
           phpunit || vendor/bin/phpunit || echo "No tests found, skipping"
 
   build-and-deploy:
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Login to Docker Hub (only if secrets are available)
       - name: Log in to Docker Hub
-        if: env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
+        if: secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != ''
         uses: docker/login-action@v3
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         with:
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Build and push services (only push if logged in)
+      # Build and push all service images
       - name: Build and push API Gateway
         uses: docker/build-push-action@v5
         with:
-          context: services/api_gateway
-          push: ${{ env.DOCKER_USERNAME != '' }}
+          context: services/api_gateway/src
+          push: ${{ secrets.DOCKER_USERNAME != '' }}
           tags: ${{ secrets.DOCKER_USERNAME }}/notification-api-gateway:latest
+
       - name: Build and push User Service
         uses: docker/build-push-action@v5
         with:
           context: services/user_service
-          push: ${{ env.DOCKER_USERNAME != '' }}
+          push: ${{ secrets.DOCKER_USERNAME != '' }}
           tags: ${{ secrets.DOCKER_USERNAME }}/notification-user-service:latest
+
       - name: Build and push Email Service
         uses: docker/build-push-action@v5
         with:
           context: services/email_service
-          push: ${{ env.DOCKER_USERNAME != '' }}
+          push: ${{ secrets.DOCKER_USERNAME != '' }}
           tags: ${{ secrets.DOCKER_USERNAME }}/notification-email-service:latest
+
       - name: Build and push Push Service
         uses: docker/build-push-action@v5
         with:
           context: services/push_service
-          push: ${{ env.DOCKER_USERNAME != '' }}
+          push: ${{ secrets.DOCKER_USERNAME != '' }}
           tags: ${{ secrets.DOCKER_USERNAME }}/notification-push-service:latest
+
       - name: Build and push Template Service
         uses: docker/build-push-action@v5
         with:
           context: services/template_service
-          push: ${{ env.DOCKER_USERNAME != '' }}
+          push: ${{ secrets.DOCKER_USERNAME != '' }}
           tags: ${{ secrets.DOCKER_USERNAME }}/notification-template-service:latest
 
-      # Health check containers
+      #  Health check containers
       - name: Test service health endpoints
         run: |
           echo "Building test containers..."
           docker-compose -f docker/docker-compose.yml up -d --build
           echo "Waiting for services to start..."
-          sleep 30
-          echo "Testing health endpoints..."
-          curl -f http://localhost:8000/api/health || echo "API Gateway health check failed"
+          for i in {1..30}; do
+            curl -f http://localhost:8000/api/health && break || sleep 2
+          done
           curl -f http://localhost:3000/health || echo "Email service health check failed"
           curl -f http://localhost:8080/health || echo "Push service health check failed"
           docker-compose -f docker/docker-compose.yml down
 
       - name: Deploy
-        if: env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
+        if: secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != ''
         run: |
-          # Add deployment steps, e.g., to Kubernetes or cloud
           echo "Deploying to production..."
-          # Example: kubectl apply -f k8s/ or aws ecs update-service
+          # Add actual deployment steps here (e.g., kubectl apply -f k8s/)

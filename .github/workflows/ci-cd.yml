@@ -164,36 +164,36 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: services/api_gateway/src
-          push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }} 
-          tags: ${{ secrets.DOCKER_USERNAME }}/notification-api-gateway:latest
+          push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+          tags: ${{ secrets.DOCKER_USERNAME != '' && format('{0}/notification-api-gateway:latest', secrets.DOCKER_USERNAME) || 'notification-api-gateway:latest' }}
 
       - name: Build and push User Service
         uses: docker/build-push-action@v5
         with:
           context: services/user_service
           push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
-          tags: ${{ secrets.DOCKER_USERNAME }}/notification-user-service:latest
+          tags: ${{ secrets.DOCKER_USERNAME != '' && format('{0}/notification-user-service:latest', secrets.DOCKER_USERNAME) || 'notification-user-service:latest' }}
 
       - name: Build and push Email Service
         uses: docker/build-push-action@v5
         with:
           context: services/email_service
           push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
-          tags: ${{ secrets.DOCKER_USERNAME }}/notification-email-service:latest
+          tags: ${{ secrets.DOCKER_USERNAME != '' && format('{0}/notification-email-service:latest', secrets.DOCKER_USERNAME) || 'notification-email-service:latest' }}
 
       - name: Build and push Push Service
         uses: docker/build-push-action@v5
         with:
           context: services/push_service
           push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
-          tags: ${{ secrets.DOCKER_USERNAME }}/notification-push-service:latest
+          tags: ${{ secrets.DOCKER_USERNAME != '' && format('{0}/notification-push-service:latest', secrets.DOCKER_USERNAME) || 'notification-push-service:latest' }}
 
       - name: Build and push Template Service
         uses: docker/build-push-action@v5
         with:
           context: services/template_service
           push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
-          tags: ${{ secrets.DOCKER_USERNAME }}/notification-template-service:latest
+          tags: ${{ secrets.DOCKER_USERNAME != '' && format('{0}/notification-template-service:latest', secrets.DOCKER_USERNAME) || 'notification-template-service:latest' }}
 
       # Optional: Health checks and deployment steps
       - name: Test service health endpoints

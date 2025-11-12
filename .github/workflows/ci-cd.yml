@@ -198,11 +198,11 @@ jobs:
       # Optional: Health checks and deployment steps
       - name: Test service health endpoints
         run: |
-          docker-compose -f docker-compose.yml up -d --build
+          docker-compose up -d --build
           for i in {1..30}; do
             curl -f http://localhost:8000/health && break || sleep 2
           done
-          docker-compose -f docker-compose.yml down
+          docker-compose down
 
       - name: Deploy
         # if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}

@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   rabbitmq:
     image: rabbitmq:3-management
@@ -18,46 +16,45 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   postgres_user:
     image: postgres:13
-    env_file:
-      - .env
     environment:
-      POSTGRES_DB: ${USER_DB_NAME}
-      POSTGRES_USER: ${USER_DB_USER}
-      POSTGRES_PASSWORD: ${USER_DB_PASS}
+      POSTGRES_DB: user_service_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
       - postgres_user_data:/var/lib/postgresql/data
+      - ./services/postgres_user/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${USER_DB_USER} -d ${USER_DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d user_service_db"]
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   postgres_template:
     image: postgres:13
-    env_file:
-      - .env
     environment:
-      POSTGRES_DB: ${TEMPLATE_DB_NAME}
-      POSTGRES_USER: ${TEMPLATE_DB_USER}
-      POSTGRES_PASSWORD: ${TEMPLATE_DB_PASS}
+      POSTGRES_DB: template_service_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5433:5432"
     volumes:
       - postgres_template_data:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${TEMPLATE_DB_USER} -d ${TEMPLATE_DB_NAME}",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d template_service_db"]
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   redis:
     image: redis:6-alpine
@@ -70,6 +67,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   api_gateway:
     build: ./services/api_gateway
@@ -81,37 +80,44 @@ services:
     environment:
       - RABBITMQ_HOST=rabbitmq
       - REDIS_HOST=redis
+      - DB_HOST=postgres_user
+      - DB_NAME=notification_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_PORT=5432
     depends_on:
+      postgres_user:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   user_service:
     build: ./services/user_service
     ports:
       - "5000:80"
-    env_file:
-      - .env
-      - ./services/user_service/.env
     environment:
       - DB_HOST=postgres_user
+      - DB_NAME=user_service_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_PORT=5432
       - REDIS_HOST=redis
     depends_on:
       postgres_user:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+    networks:
+      - app_network
 
   email_service:
     build: ./services/email_service
@@ -129,10 +135,12 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD-SHELL", "curl -fs http://localhost:3000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   push_service:
     build: ./services/push_service
@@ -150,21 +158,25 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   template_service:
     build: ./services/template_service
     ports:
       - "8081:8081"
-    env_file:
-      - .env
-      - ./services/template_service/.env
     environment:
       - DB_HOST=postgres_template
+      - DB_NAME=template_service_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_PORT=5432
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       postgres_template:
         condition: service_healthy
@@ -175,9 +187,15 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
 volumes:
   rabbitmq_data:
   postgres_user_data:
   postgres_template_data:
   redis_data:
+
+networks:
+  app_network:
+    driver: bridge

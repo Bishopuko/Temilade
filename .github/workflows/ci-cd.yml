@@ -173,35 +173,18 @@ jobs:
               services/$service
           done
 
-      # Deploy each service to Railway
-      - name: Deploy to Railway
-        uses: railwayapp/railway-action@v1
-        with:
-          apiKey: ${{ secrets.RAILWAY_API_KEY }}
-          projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
-          # The "serviceName" should match the service names in Railway
-          serviceName: api-gateway
-      - name: Deploy User Service
-        uses: railwayapp/railway-action@v1
-        with:
-          apiKey: ${{ secrets.RAILWAY_API_KEY }}
-          projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
-          serviceName: user-service
-      - name: Deploy Email Service
-        uses: railwayapp/railway-action@v1
-        with:
-          apiKey: ${{ secrets.RAILWAY_API_KEY }}
-          projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
-          serviceName: email-service
-      - name: Deploy Push Service
-        uses: railwayapp/railway-action@v1
-        with:
-          apiKey: ${{ secrets.RAILWAY_API_KEY }}
-          projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
-          serviceName: push-service
-      - name: Deploy Template Service
-        uses: railwayapp/railway-action@v1
-        with:
-          apiKey: ${{ secrets.RAILWAY_API_KEY }}
-          projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
-          serviceName: template-service
+      # Install Railway CLI
+      - name: Install Railway CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/railwayapp/cli/master/install.sh | sh
+          railway login --apiKey $RAILWAY_API_KEY
+
+      # Deploy all services using Railway CLI
+      - name: Deploy all services to Railway
+        run: |
+          services=(api-gateway user-service email-service push-service template-service)
+          for service in "${services[@]}"; do
+            echo "Deploying $service..."
+            railway link $RAILWAY_PROJECT_ID --service $service
+            railway up --detach
+          done

@@ -21,17 +21,19 @@ services:
 
   postgres_user:
     image: postgres:13
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: user_service_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${USER_DB_NAME}
+      POSTGRES_USER: ${USER_DB_USER}
+      POSTGRES_PASSWORD: ${USER_DB_PASS}
     ports:
       - "5432:5432"
     volumes:
       - postgres_user_data:/var/lib/postgresql/data
       - ./services/postgres_user/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d user_service_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${USER_DB_USER} -d ${USER_DB_NAME}"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -40,16 +42,18 @@ services:
 
   postgres_template:
     image: postgres:13
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: template_service_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${TEMPLATE_DB_NAME}
+      POSTGRES_USER: ${TEMPLATE_DB_USER}
+      POSTGRES_PASSWORD: ${TEMPLATE_DB_PASS}
     ports:
       - "5433:5432"
     volumes:
       - postgres_template_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d template_service_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${TEMPLATE_DB_USER} -d ${TEMPLATE_DB_NAME}"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -78,13 +82,13 @@ services:
       - .env
       - ./services/api_gateway/src/.env
     environment:
-      - RABBITMQ_HOST=rabbitmq
-      - REDIS_HOST=redis
-      - DB_HOST=postgres_user
-      - DB_NAME=notification_db
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_PORT=5432
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - REDIS_HOST=${REDIS_HOST}
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PORT=${DB_PORT}
     depends_on:
       postgres_user:
         condition: service_healthy
@@ -104,13 +108,23 @@ services:
     build: ./services/user_service
     ports:
       - "5000:80"
+    env_file:
+      - .env
     environment:
-      - DB_HOST=postgres_user
-      - DB_NAME=user_service_db
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_PORT=5432
-      - REDIS_HOST=redis
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+      - ASPNETCORE_URLS=${ASPNETCORE_URLS}
+      - DB_HOST=${USER_DB_HOST}
+      - DB_PORT=${USER_DB_PORT}
+      - DB_NAME=${USER_DB_NAME}
+      - DB_USER=${USER_DB_USER}
+      - DB_PASSWORD=${USER_DB_PASS}
+      - DB_CONNECTION_STRING=Host=${USER_DB_HOST};Port=${USER_DB_PORT};Database=${USER_DB_NAME};Username=${USER_DB_USER};Password=${USER_DB_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ISSUER=${JWT_ISSUER}
+      - JWT_AUDIENCE=${JWT_AUDIENCE}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - LOG_LEVEL=${LOG_LEVEL}
     depends_on:
       postgres_user:
         condition: service_healthy
@@ -127,8 +141,14 @@ services:
       - .env
       - ./services/email_service/.env
     environment:
-      - RABBITMQ_HOST=rabbitmq
-      - REDIS_HOST=redis
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - REDIS_HOST=${REDIS_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - TEMPLATE_SERVICE_URL=${TEMPLATE_SERVICE_URL}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - NODE_ENV=${EMAIL_NODE_ENV}
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -150,8 +170,11 @@ services:
       - .env
       - ./services/push_service/.env
     environment:
-      - RABBITMQ_HOST=rabbitmq
-      - REDIS_HOST=redis
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - REDIS_HOST=${REDIS_HOST}
+      - FIREBASE_SERVICE_ACCOUNT=${FIREBASE_SERVICE_ACCOUNT}
+      - APNS_CERT_PATH=${APNS_CERT_PATH}
+      - APNS_KEY_PATH=${APNS_KEY_PATH}
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -169,14 +192,16 @@ services:
     build: ./services/template_service
     ports:
       - "8081:8081"
+    env_file:
+      - .env
     environment:
-      - DB_HOST=postgres_template
-      - DB_NAME=template_service_db
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_PORT=5432
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - DB_HOST=${TEMPLATE_DB_HOST}
+      - DB_NAME=${TEMPLATE_DB_NAME}
+      - DB_USER=${TEMPLATE_DB_USER}
+      - DB_PASSWORD=${TEMPLATE_DB_PASS}
+      - DB_PORT=${TEMPLATE_DB_PORT}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
     depends_on:
       postgres_template:
         condition: service_healthy

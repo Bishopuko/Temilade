@@ -178,19 +178,17 @@ jobs:
           curl -sSL https://raw.githubusercontent.com/railwayapp/cli/master/install.sh | sh
           export RAILWAY_TOKEN=$RAILWAY_API_KEY
 
-
       - name: Deploy all services to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
           RAILWAY_API_KEY: ${{ secrets.RAILWAY_API_KEY }}
         run: |
-         services=(api-gateway user-service email-service push-service template-service)
-          for service in "${services[@]}"; do
-            echo "🚀 Deploying $service..."
-            folder_name=${service//-/_}   # convert hyphens to underscores
-            cd services/$folder_name
-            railway up --service "$service" --detach --ci
-            cd ../..
-          done
-      
+          services=(api_gateway user_service email_service push_service template_service)
+           for service in "${services[@]}"; do
+             echo "🚀 Deploying $service..."
+             folder_name=${service//-/_}   # convert hyphens to underscores
+             cd services/$folder_name
+             railway up --service "$service" --detach --ci
+             cd ../..
+           done

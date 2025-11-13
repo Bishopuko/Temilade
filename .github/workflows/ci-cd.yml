@@ -173,13 +173,12 @@ jobs:
               services/$service
           done
 
-      # Install Railway CLI
       - name: Install Railway CLI
         run: |
           curl -sSL https://raw.githubusercontent.com/railwayapp/cli/master/install.sh | sh
-          railway login --apiKey $RAILWAY_API_KEY
+          export RAILWAY_TOKEN=$RAILWAY_API_KEY
 
-      # Deploy all services using Railway CLI
+
       - name: Deploy all services to Railway
         run: |
           services=(api-gateway user-service email-service push-service template-service)
@@ -188,3 +187,4 @@ jobs:
             railway link $RAILWAY_PROJECT_ID --service $service
             railway up --detach
           done
+

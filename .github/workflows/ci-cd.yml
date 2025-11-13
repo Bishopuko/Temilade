@@ -180,6 +180,8 @@ jobs:
 
 
       - name: Deploy all services to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_KEY }}
         run: |
           services=(api-gateway user-service email-service push-service template-service)
           for service in "${services[@]}"; do

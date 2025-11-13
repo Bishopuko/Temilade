@@ -95,6 +95,7 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
         'HOST': os.getenv('DB_HOST', 'postgres'),
         'PORT': os.getenv('DB_PORT', '5432'),
+        'OPTIONS': {'sslmode': 'require'}, 
     }
 }
 
@@ -148,7 +149,7 @@ RABBITMQ_PORT = int(os.getenv('RABBITMQ_PORT', 5672))
 RABBITMQ_USER = os.getenv('RABBITMQ_USER', 'admin')
 RABBITMQ_PASS = os.getenv('RABBITMQ_PASS', 'admin')
 
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 
 # Logging configuration
@@ -246,7 +247,7 @@ CORS_ALLOWED_ORIGINS = [
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://localhost:6379/1",
+        "LOCATION": "redis://redis:6379/0",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }

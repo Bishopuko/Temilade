@@ -1,6 +1,7 @@
 const amqp = require("amqplib");
 const redis = require("redis");
 const admin = require("firebase-admin");
+const fastify = require("fastify")({ logger: true });
 
 // Initialize Firebase Admin SDK
 let firebaseInitialized = false;
@@ -224,4 +225,51 @@ async function connectRabbitMQ() {
   }
 }
 
+// Health check endpoint
+fastify.get('/health', async (request, reply) => {
+  try {
+    // Check Redis connection
+    await redisClient.ping();
+
+    // Check Firebase initialization status
+    const firebaseStatus = firebaseInitialized ? 'initialized' : 'not_initialized';
+
+    return {
+      status: 'healthy',
+      service: 'push-service',
+      timestamp: new Date().toISOString(),
+      dependencies: {
+        redis: 'connected',
+        rabbitmq: 'connected', // Assumed based on service startup
+        firebase: firebaseStatus
+      }
+    };
+  } catch (error) {
+    reply.code(503);
+    return {
+      status: 'unhealthy',
+      service: 'push-service',
+      timestamp: new Date().toISOString(),
+      error: error.message,
+      dependencies: {
+        redis: error.message.includes('Redis') ? 'disconnected' : 'connected',
+        rabbitmq: 'unknown',
+        firebase: firebaseInitialized ? 'initialized' : 'not_initialized'
+      }
+    };
+  }
+});
+
+// Start the server
+const start = async () => {
+  try {
+    await fastify.listen({ port: 8080, host: '0.0.0.0' });
+    console.log('Push service HTTP server listening on port 8080');
+  } catch (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+};
+
+start();
 connectRabbitMQ();

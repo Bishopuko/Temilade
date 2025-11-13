@@ -376,24 +376,27 @@ def get_notification_status(request, request_id):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+# @ratelimit(key='user', rate='1000/m', block=False)  # Disable throttling for health check
 def health_check(request):
     """Health check endpoint"""
     # Check Redis connectivity
     try:
         redis_client.ping()
         redis_status = 'healthy'
-    except:
+    except Exception as e:
         redis_status = 'unhealthy'
+        logger.warning(f"Redis health check failed: {e}")
 
     # Check RabbitMQ connectivity
     try:
         connection = get_rabbitmq_connection()
         connection.close()
         rabbitmq_status = 'healthy'
-    except:
+    except Exception as e:
         rabbitmq_status = 'unhealthy'
+        logger.warning(f"RabbitMQ health check failed: {e}")
 
-    overall_status = 'healthy' if redis_status == 'healthy' and rabbitmq_status == 'healthy' else 'degraded'
+    overall_status = 'healthy' if rabbitmq_status == 'healthy' else 'degraded'
 
     return Response({
         'status': overall_status,

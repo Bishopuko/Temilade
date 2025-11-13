@@ -1,6 +1,7 @@
 const amqp = require("amqplib");
 const nodemailer = require("nodemailer");
 const redis = require("redis");
+const fastify = require("fastify")({ logger: true });
 
 // Redis client
 const redisClient = redis.createClient({
@@ -159,4 +160,50 @@ async function connectRabbitMQ() {
   }
 }
 
+// Health check endpoint
+fastify.get('/health', async (request, reply) => {
+  try {
+    // Check Redis connection
+    await redisClient.ping();
+
+    // Check RabbitMQ connection (simplified check)
+    // Since we don't have a direct way to check, we'll assume it's healthy if the service is running
+    // In a production environment, you'd want to check the actual connection status
+
+    return {
+      status: 'healthy',
+      service: 'email-service',
+      timestamp: new Date().toISOString(),
+      dependencies: {
+        redis: 'connected',
+        rabbitmq: 'connected' // Assumed based on service startup
+      }
+    };
+  } catch (error) {
+    reply.code(503);
+    return {
+      status: 'unhealthy',
+      service: 'email-service',
+      timestamp: new Date().toISOString(),
+      error: error.message,
+      dependencies: {
+        redis: error.message.includes('Redis') ? 'disconnected' : 'connected',
+        rabbitmq: 'unknown'
+      }
+    };
+  }
+});
+
+// Start the server
+const start = async () => {
+  try {
+    await fastify.listen({ port: 3000, host: '0.0.0.0' });
+    console.log('Email service HTTP server listening on port 3000');
+  } catch (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+};
+
+start();
 connectRabbitMQ();

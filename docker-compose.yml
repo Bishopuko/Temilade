@@ -18,6 +18,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   postgres_user:
     image: postgres:13
@@ -36,6 +38,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   postgres_template:
     image: postgres:13
@@ -50,14 +54,12 @@ services:
     volumes:
       - postgres_template_data:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${TEMPLATE_DB_USER} -d ${TEMPLATE_DB_NAME}",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U ${TEMPLATE_DB_USER} -d ${TEMPLATE_DB_NAME}"]
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   redis:
     image: redis:6-alpine
@@ -70,6 +72,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   api_gateway:
     build: ./services/api_gateway
@@ -81,16 +85,23 @@ services:
     environment:
       - RABBITMQ_HOST=rabbitmq
       - REDIS_HOST=redis
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PORT=${DB_PORT}
     depends_on:
       rabbitmq:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   user_service:
     build: ./services/user_service
@@ -112,6 +123,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   email_service:
     build: ./services/email_service
@@ -133,6 +146,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   push_service:
     build: ./services/push_service
@@ -154,6 +169,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
   template_service:
     build: ./services/template_service
@@ -175,9 +192,15 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - app_network
 
 volumes:
   rabbitmq_data:
   postgres_user_data:
   postgres_template_data:
   redis_data:
+
+networks:
+  app_network:
+    driver: bridge

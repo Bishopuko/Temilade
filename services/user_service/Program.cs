@@ -82,6 +82,41 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.MapGet("/health", () => new { service = "user_service" });
+app.MapGet("/health", () =>
+{
+    try
+    {
+        // Check database connectivity
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        dbContext.Database.CanConnect();
+
+        // Check Redis connectivity
+        var redis = scope.ServiceProvider.GetRequiredService<IConnectionMultiplexer>();
+        redis.GetDatabase().Ping();
+
+        return Results.Ok(new
+        {
+            status = "healthy",
+            service = "user_service",
+            dependencies = new
+            {
+                database = "healthy",
+                redis = "healthy"
+            },
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new
+        {
+            status = "unhealthy",
+            service = "user_service",
+            error = ex.Message,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+        }, statusCode: 503);
+    }
+});
 
 app.Run();

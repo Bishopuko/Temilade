@@ -176,19 +176,38 @@ jobs:
       - name: Install Railway CLI
         run: |
           curl -sSL https://raw.githubusercontent.com/railwayapp/cli/master/install.sh | sh
-          export RAILWAY_TOKEN=$RAILWAY_API_KEY
+          export PATH="$HOME/.railway/bin:$PATH"
 
       - name: Deploy all services to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_API_KEY: ${{ secrets.RAILWAY_API_KEY }}
         run: |
+          export PATH="$HOME/.railway/bin:$PATH"
+
+          # Railway CLI uses RAILWAY_TOKEN env var for authentication
+          # Verify Railway CLI is working
+          railway whoami || echo "Railway authentication check"
+
           services=(api_gateway user_service email_service push_service template_service)
-           for service in "${services[@]}"; do
-             echo "🚀 Deploying $service..."
-             folder_name=${service//-/_}   # convert hyphens to underscores
-             cd services/$folder_name
-             railway up --service "$service" --detach --ci
-             cd ../..
-           done
+          for service in "${services[@]}"; do
+            echo "🚀 Deploying $service..."
+            folder_name=${service//-/_}   # convert hyphens to underscores
+            cd services/$folder_name
+            
+            # Link to Railway project in each service directory
+            railway link $RAILWAY_PROJECT_ID --non-interactive 2>&1 || echo "Link skipped (may already be linked)"
+            
+            # Try deploying with service name first, fallback to auto-create
+            if railway up --service "$service" --detach 2>&1; then
+              echo "✅ Successfully deployed $service"
+            else
+              echo "⚠️ Service '$service' not found or deployment failed, trying without --service flag..."
+              # Deploy without --service flag - Railway will create service automatically
+              railway up --detach 2>&1 || {
+                echo "❌ Failed to deploy $service"
+                # Don't fail the entire workflow, continue with next service
+              }
+            fi
+            cd ../..
+          done

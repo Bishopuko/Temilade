@@ -185,29 +185,58 @@ jobs:
         run: |
           export PATH="$HOME/.railway/bin:$PATH"
 
-          # Railway CLI uses RAILWAY_TOKEN env var for authentication
-          # Verify Railway CLI is working
-          railway whoami || echo "Railway authentication check"
+          # Verify Railway authentication
+          if ! railway whoami 2>/dev/null; then
+            echo "❌ Railway authentication failed. Please check RAILWAY_TOKEN secret."
+            exit 1
+          fi
+          echo "✅ Railway authenticated successfully"
+
+          # Link to Railway project at root level (only once)
+          # Railway link command accepts project ID via stdin or as argument
+          if [ ! -f .railway/project.json ]; then
+            echo "Linking to Railway project..."
+            echo "$RAILWAY_PROJECT_ID" | railway link 2>&1 || {
+              # Alternative: try with --project flag if available
+              railway link --project "$RAILWAY_PROJECT_ID" 2>&1 || {
+                echo "⚠️ Failed to link project. You may need to link manually."
+              }
+            }
+          else
+            echo "Project already linked"
+          fi
 
           services=(api_gateway user_service email_service push_service template_service)
           for service in "${services[@]}"; do
+            echo ""
             echo "🚀 Deploying $service..."
             folder_name=${service//-/_}   # convert hyphens to underscores
             cd services/$folder_name
             
-            # Link to Railway project in each service directory
-            railway link $RAILWAY_PROJECT_ID --non-interactive 2>&1 || echo "Link skipped (may already be linked)"
+            # Get list of services in the project
+            echo "Checking existing services in project..."
+            service_list_output=$(railway service list 2>&1 || echo "service list failed")
+            echo "Service list output: $service_list_output"
             
-            # Try deploying with service name first, fallback to auto-create
-            if railway up --service "$service" --detach 2>&1; then
-              echo "✅ Successfully deployed $service"
+            # Check if our specific service exists (case-insensitive, flexible matching)
+            if echo "$service_list_output" | grep -qiE "(^|[[:space:]])${service}([[:space:]]|$)"; then
+              echo "✅ Service '$service' found in project"
+              railway up --service "$service" --detach && echo "✅ Successfully deployed $service" || {
+                echo "❌ Deployment failed for $service"
+              }
             else
-              echo "⚠️ Service '$service' not found or deployment failed, trying without --service flag..."
-              # Deploy without --service flag - Railway will create service automatically
-              railway up --detach 2>&1 || {
-                echo "❌ Failed to deploy $service"
-                # Don't fail the entire workflow, continue with next service
+              echo "⚠️ Service '$service' not found in project."
+              echo "   Attempting to deploy - Railway may auto-create the service..."
+              # When multiple services exist, we must specify --service
+              # But if service doesn't exist, we can't use --service
+              # Solution: Try to create service context first, or deploy from root
+              railway up --detach 2>&1 | head -30 || {
+                echo "⚠️ Auto-deployment failed."
+                echo "   Please create service '$service' manually in Railway dashboard,"
+                echo "   or ensure the service name matches exactly."
               }
             fi
             cd ../..
           done
+          echo ""
+          echo "✅ Deployment cycle completed"

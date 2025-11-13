@@ -174,10 +174,13 @@ jobs:
           done
 
       - name: Install Railway CLI
-        run: |
-          curl -sSL https://raw.githubusercontent.com/railwayapp/cli/master/install.sh | sh
-          export RAILWAY_TOKEN=$RAILWAY_API_KEY
+        run: curl sSL https://railway.app/install.sh | sh
 
+      - name: Login to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_KEY }}
+        run: |
+          railway login --token $RAILWAY_TOKEN
 
       - name: Deploy all services to Railway
         env:
@@ -188,6 +191,6 @@ jobs:
           for service in "${services[@]}"; do
             echo "🚀 Deploying $service..."
             cd services/$service
-            railway up --service "$service" --detach --ci
+            railway up --service "$service" --ci --detach
             cd ../..
           done

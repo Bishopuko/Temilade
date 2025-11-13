@@ -186,7 +186,7 @@ jobs:
           services=(api-gateway user-service email-service push-service template-service)
           for service in "${services[@]}"; do
             echo "Deploying $service..."
-           railway link --project $RAILWAY_PROJECT_ID --service $service
+           railway link --token $RAILWAY_TOKEN --project $RAILWAY_PROJECT_ID --service $service
             railway up --detach
           done
 

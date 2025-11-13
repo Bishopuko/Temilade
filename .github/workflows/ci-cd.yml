@@ -182,11 +182,12 @@ jobs:
       - name: Deploy all services to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_KEY }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: |
           services=(api_gateway user_service email_service push_service template_service)
           for service in "${services[@]}"; do
             echo "🚀 Deploying $service..."
             cd services/$service
-            railway up --service "$service" --project $RAILWAY_PROJECT_ID --detach
+            railway up --service "$service" --detach --ci
             cd ../..
           done

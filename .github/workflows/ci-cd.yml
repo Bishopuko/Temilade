@@ -183,7 +183,7 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_KEY }}
         run: |
-          services=(api-gateway user-service email-service push-service template-service)
+          services=(api_gateway user_service email_service push_service template_service)
           for service in "${services[@]}"; do
             echo "🚀 Deploying $service..."
             cd services/$service

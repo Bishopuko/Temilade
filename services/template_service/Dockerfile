@@ -1,36 +1,19 @@
-FROM php:8.3-cli
+FROM python:3.9-slim
 
-WORKDIR /app
+WORKDIR /t
 
-# Install dependencies and PHP extensions
-RUN apt-get update && \
-    apt-get install -y \
-        libzip-dev \
-        unzip \
-        libpq-dev \
-        git \
-        curl \
-    && docker-php-ext-install \
-        sockets \
-        pdo \
-        pdo_pgsql \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Composer globally
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-
-# Copy composer files first for layer caching
-COPY lumen/composer.json lumen/composer.lock* ./
-
-# Install PHP dependencies (ignore ext-sockets since it’s built-in now)
-RUN pecl install redis && docker-php-ext-enable redis
-RUN composer install --no-dev --optimize-autoloader
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application source
-COPY lumen/ .
+COPY . .
 
-# Expose the app port
+# Run migrations and start Django server
 EXPOSE 8081
-
-# Start Lumen using PHP’s built-in server
-CMD ["php", "-S", "0.0.0.0:8081", "-t", "public"]
+CMD ["python", "templates/manage.py", "runserver", "0.0.0.0:8081"]

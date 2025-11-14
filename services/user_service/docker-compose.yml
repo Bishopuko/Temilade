@@ -10,11 +10,22 @@ services:
       - "5001:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=UserServiceDb;Username=postgres;Password=damimola
       - ConnectionStrings__Redis=redis:6379
       - Jwt__Secret=your-super-secret-jwt
       - Jwt__Issuer=user-service
       - Jwt__Audience=notification-system
+      - DB_HOST=${USER_DB_HOST}
+      - DB_PORT=${USER_DB_PORT}
+      - DB_NAME=${USER_DB_NAME}
+      - DB_USER=${USER_DB_USER}
+      - DB_PASSWORD=${USER_DB_PASS}
+
+      - ConnectionStrings__DefaultConnection=Host=${USER_DB_HOST};Port=${USER_DB_PORT};Database=${USER_DB_NAME};Username=${USER_DB_USER};Password=${USER_DB_PASS}
+      - ConnectionStrings__Redis=${REDIS_HOST}:${REDIS_PORT}
+
+      - Jwt__Secret=${JWT_SECRET_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
     depends_on:
       - postgres
       - redis

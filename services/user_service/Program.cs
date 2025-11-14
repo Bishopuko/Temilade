@@ -14,14 +14,14 @@ builder.Services.AddControllers();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-var redisConnection = builder.Configuration.GetConnectionString("Redis") 
+var redisConnection = builder.Configuration.GetConnectionString("Redis")
     ?? throw new InvalidOperationException("Redis connection string not configured");
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(redisConnection));
 
 
-var jwtSecret = builder.Configuration["Jwt:Secret"] 
+var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? throw new InvalidOperationException("JWT Secret not configured");
 
 builder.Services.AddAuthentication(options =>
@@ -91,18 +91,29 @@ app.MapGet("/health", () =>
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         dbContext.Database.CanConnect();
 
-        // Check Redis connectivity
-        var redis = scope.ServiceProvider.GetRequiredService<IConnectionMultiplexer>();
-        redis.GetDatabase().Ping();
+        // Check Redis connectivity (optional for local testing)
+        string redisStatus = "unknown";
+        try
+        {
+            var redis = scope.ServiceProvider.GetRequiredService<IConnectionMultiplexer>();
+            redis.GetDatabase().Ping();
+            redisStatus = "healthy";
+        }
+        catch
+        {
+            redisStatus = "unhealthy";
+        }
+
+        var overallStatus = redisStatus == "healthy" ? "healthy" : "degraded";
 
         return Results.Ok(new
         {
-            status = "healthy",
+            status = overallStatus,
             service = "user_service",
             dependencies = new
             {
                 database = "healthy",
-                redis = "healthy"
+                redis = redisStatus
             },
             timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         });
@@ -119,4 +130,20 @@ app.MapGet("/health", () =>
     }
 });
 
+// Apply EF Core migrations at startup
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    try
+    {
+        dbContext.Database.Migrate();
+        Console.WriteLine("Database migrations applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error applying migrations: {ex.Message}");
+    }
+}
+
 app.Run();
+

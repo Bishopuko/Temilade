@@ -1,9 +1,0 @@
-{
-    "name": "template/service",
-    "description": "Template management service",
-    "require": {
-        "slim/slim": "^4.0",
-        "illuminate/database": "^10.0",
-        "php-amqplib/php-amqplib": "^3.0"
-    }
-}

@@ -16,4 +16,4 @@ COPY . .
 
 # Run migrations and start Django server
 EXPOSE 8081
-CMD ["python", "templates/manage.py", "runserver", "0.0.0.0:8081"]
+CMD ["python", "templates_project/manage.py", "runserver", "0.0.0.0:8081"]

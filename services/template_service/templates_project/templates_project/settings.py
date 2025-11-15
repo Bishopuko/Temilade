@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 
 # settings.py
-ROOT_DIR = Path(__file__).resolve().parents[4]  # Go up 3 levels
+ROOT_DIR = Path(__file__).resolve().parents[1]  # Go up 1 level
 load_dotenv(ROOT_DIR / ".env")
 
 
@@ -59,7 +59,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'templates.urls'
+ROOT_URLCONF = 'templates_project.urls'
 
 TEMPLATES = [
     {
@@ -77,7 +77,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'templates.wsgi.application'
+WSGI_APPLICATION = 'templates_project.wsgi.application'
 
 
 # Database

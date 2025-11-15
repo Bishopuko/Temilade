@@ -133,13 +133,13 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('services/template_service/templates_project/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('services/template_service/requirements.txt') }}
           restore-keys: ${{ runner.os }}-pip-
 
       - name: Install and Test Template service
         if: matrix.service == 'template_service'
         run: |
-          pip install -r services/template_service/templates_project/requirements.txt
+          pip install -r services/template_service/requirements.txt
           cd services/template_service/templates_project
           python manage.py test || echo "No tests found, skipping"
 

@@ -121,19 +121,27 @@ jobs:
           npm install
           npm test || echo "No tests found, skipping"
 
-      # PHP / Template Service
-      - name: Setup PHP
+     # Python / API Gateway
+      - name: Setup Python
         if: matrix.service == 'template_service'
-        uses: shivammathur/setup-php@v2
+        uses: actions/setup-python@v4
         with:
-          php-version: 8.1
+          python-version: 3.9
 
-      - name: Install and Test Template Service
+      - name: Cache pip dependencies
+        if: matrix.service == 'template_service'
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('services/template_service/templates_project/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install and Test Template service
         if: matrix.service == 'template_service'
         run: |
-          cd services/template_service
-          composer install --no-dev --optimize-autoloader
-          vendor/bin/phpunit || echo "No tests found, skipping"
+          pip install -r services/template_service/templates_project/requirements.txt
+          cd services/template_service/templates_project
+          python manage.py test || echo "No tests found, skipping"
 
   # ----------------------------
   # Build, push Docker images, and deploy to Railway

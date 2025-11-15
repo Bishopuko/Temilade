@@ -143,6 +143,38 @@ def record_success(service_name):
         state['state'] = 'closed'
         state['failures'] = 0
         set_circuit_breaker_state(service_name, state)
+        
+        
+class UserRegistrationView(APIView):
+    """User registration endpoint"""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        data = request.data
+        user_service_url = f"http://user_service:5000/api/v1/users"
+
+        try:
+            response = requests.post(user_service_url, json=data, timeout=5, verify=False)
+            logger.info(f"User service response: status={response.status_code}, body={response.text}")
+            if response.status_code == 201:
+                return Response({
+                    'success': True,
+                    'message': 'User registered successfully',
+                    'details' : response.json()  
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'User registration failed',
+                    'details': response.json()
+                }, status=response.status_code)
+        except Exception as e:
+            logger.error(f"Error during user registration: {str(e)}")
+            return Response({
+                'success': False,
+                'error': 'Internal server error'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 
 def validate_notification_data(data):
     """Validate notification request data"""
